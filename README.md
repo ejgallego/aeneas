@@ -117,6 +117,40 @@ to display a detailed documentation.
 >     rev = "COMMIT_HASH_HERE"
 >     ```
 
+### Rust source provenance in Lean
+
+Pass `-lean-rust-source` to the Lean backend to attach Charon's display name
+and source range to generated functions backed by a local Rust definition.
+Import the generated module and use `Aeneas.RustSource.find? env declName` with
+the fully qualified Lean name. In a Lean module, use
+`meta import Aeneas.RustSource` to access the query. Multiple target variants
+can share a source range. Copied trait defaults omit provenance because Charon
+associates the copy with its enclosing `impl`.
+
+Ranges refer to the Rust input compiled by Charon, including any translation
+patches. Paths retain Charon's spelling. Local paths can use remapped prefixes
+such as `/cargo`, `/rustc`, or `/toolchain`. Resolve relative paths from the
+directory where Charon ran rustc and verify that the source matches the
+translation inputs. Ranges are half-open with one-based lines and zero-based
+rustc display columns. Editor clients convert these columns to the position
+encoding they use. For a macro-generated item the main range identifies the
+invocation and `generatedFrom?` preserves the underlying source range reported
+by Charon, when available.
+
+The [regression fixture](tests/src/rust_source_provenance.rs) uses two targets
+from Charon's pinned toolchain. The Lean check looks up provenance in the
+imported environment. The headless test reads the Rust fixture to check that a
+Verso proof docstring can render it, its references open Rust definitions, and
+the same name in a Lean term opens the generated definition. Run both checks
+from the repository root.
+
+```sh
+make test-rust_source_provenance.rs
+cd tests/lean
+lake build RustSourceCheck RustSourceNavigation
+lake env lean --run scripts/RustSourceNavigation.lean
+```
+
 ## Targeted Subset And Current Limitations
 
 Aeneas currently functionalizes a subset of safe Rust, and we are in the process

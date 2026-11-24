@@ -108,6 +108,9 @@ package «tests» {}
 @[default_target] lean_lib RenameAttribute
 @[default_target] lean_lib Results
 @[default_target] lean_lib RustBorrowCheckIssues
+@[default_target] lean_lib RustSourceCheck
+@[default_target] lean_lib RustSourceNavigation
+@[default_target] lean_lib RustSourceProvenance
 @[default_target] lean_lib Scalars
 @[default_target] lean_lib Slices
 @[default_target] lean_lib Static

@@ -2073,6 +2073,65 @@ let extract_fun_comment (ctx : extraction_ctx) (fmt : F.formatter)
   extract_comment_with_span ctx fmt comment name
     ~public:def.item_meta.attr_info.public def.item_meta.span
 
+(** Preserve Charon's paths and locations verbatim in the Lean attribute. *)
+let rust_source_attribute (ctx : extraction_ctx) (def : fun_decl) : string list
+    =
+  let has_source_definition () =
+    let source =
+      match def.src with
+      | TargetDependentFun dispatcher ->
+          (* Charon preserves the original function kind on the dispatcher. *)
+          A.FunDeclId.Map.find_opt dispatcher.id ctx.crate.fun_decls
+          |> Option.map (fun (dispatcher : A.fun_decl) -> dispatcher.src)
+      | src -> Some src
+    in
+    match source with
+    | Some
+        ( NormalFun | InherentImplFun _ | TraitDefaultFun _
+        | TraitImplFun (_, _, _, false) ) -> true
+    (* Charon assigns copied trait defaults the enclosing impl's span. *)
+    | _ -> false
+  in
+  if
+    (not !lean_rust_source)
+    || (not def.item_meta.is_local)
+    || Option.is_some def.loop_id
+    || not (has_source_definition ())
+  then []
+  else
+    let quote s =
+      let escape = function
+        | '"' -> "\\\""
+        | '\\' -> "\\\\"
+        | '\n' -> "\\n"
+        | '\r' -> "\\r"
+        | '\t' -> "\\t"
+        | c when c < ' ' || c = '\127' -> Printf.sprintf "\\x%02x" (Char.code c)
+        | c -> String.make 1 c
+      in
+      "\""
+      ^ String.concat "" (List.map escape (StringUtils.string_to_chars s))
+      ^ "\""
+    in
+    let span (data : Meta.span_data) =
+      let kind, path =
+        match data.file.name with
+        | Local path -> ("", path)
+        | Virtual path -> (" virtual", path)
+        | NotReal path -> (" not_real", path)
+      in
+      Printf.sprintf "(%s %d:%d-%d:%d%s)" (quote path) data.beg_loc.line
+        data.beg_loc.col data.end_loc.line data.end_loc.col kind
+    in
+    let name = quote (name_to_string ctx def.item_meta.name) in
+    let source = def.item_meta.span in
+    let expansion =
+      match source.generated_from_span with
+      | None -> ""
+      | Some data -> " from " ^ span data
+    in
+    [ "rust_source " ^ name ^ " " ^ span source.data ^ expansion ]
+
 (** Extract a function declaration.
 
     This function is for all function declarations and all backends **at the
@@ -2130,7 +2189,10 @@ let extract_fun_decl_gen (ctx : extraction_ctx) (fmt : F.formatter)
       [ "trait_default" ]
     else []
   in
-  let attributes = rust_attributes @ reduc_attribute @ trait_default in
+  let attributes =
+    rust_attributes @ reduc_attribute @ trait_default
+    @ rust_source_attribute ctx def
+  in
   extract_attributes span ctx fmt def.item_meta.name None attributes "rust_fun"
     []
     ~is_external:(not def.item_meta.is_local);
