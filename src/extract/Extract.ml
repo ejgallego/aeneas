@@ -2053,7 +2053,81 @@ let extract_template_lean_termination_and_decreasing (ctx : extraction_ctx)
   F.pp_close_box fmt ();
   F.pp_print_break fmt 0 0
 
-let extract_fun_comment (ctx : extraction_ctx) (fmt : F.formatter)
+let has_rust_source (ctx : extraction_ctx) (def : fun_decl) : bool =
+  if
+    (not !lean_rust_source)
+    || (not def.item_meta.is_local)
+    || Option.is_some def.loop_id
+  then false
+  else
+    let source =
+      match def.src with
+      | TargetDependentFun dispatcher ->
+          (* Charon preserves the original function kind on the dispatcher. *)
+          A.FunDeclId.Map.find_opt dispatcher.id ctx.crate.fun_decls
+          |> Option.map (fun (dispatcher : A.fun_decl) -> dispatcher.src)
+      | src -> Some src
+    in
+    match source with
+    | Some
+        ( NormalFun | InherentImplFun _ | TraitDefaultFun _
+        | TraitImplFun (_, _, _, false) ) -> true
+    (* Charon assigns copied trait defaults the enclosing impl's span. *)
+    | _ -> false
+
+(** Quote the payload as a Lean string inside Verso inline code and a doc
+    comment. *)
+let quote_rust_source (s : string) : string =
+  let len = String.length s in
+  let buf = Buffer.create (len + 2) in
+  Buffer.add_char buf '"';
+  String.iteri
+    (fun i c ->
+      match c with
+      | '"' -> Buffer.add_string buf "\\\""
+      | '\\' -> Buffer.add_string buf "\\\\"
+      | '\n' -> Buffer.add_string buf "\\n"
+      | '\r' -> Buffer.add_string buf "\\r"
+      | '\t' -> Buffer.add_string buf "\\t"
+      | '`' -> Buffer.add_string buf "\\x60"
+      | '-' when (i > 0 && s.[i - 1] = '/') || (i + 1 < len && s.[i + 1] = '/')
+        -> Buffer.add_string buf "\\x2d"
+      | c when c < ' ' || c = '\127' ->
+          Buffer.add_string buf (Printf.sprintf "\\x%02x" (Char.code c))
+      | c -> Buffer.add_char buf c)
+    s;
+  Buffer.add_char buf '"';
+  Buffer.contents buf
+
+let extract_rust_source_doc (ctx : extraction_ctx) (fmt : F.formatter)
+    (def : fun_decl) : unit =
+  let span (data : Meta.span_data) =
+    let kind, path =
+      match data.file.name with
+      | Local path -> ("", path)
+      | Virtual path -> (" virtual", path)
+      | NotReal path -> (" not_real", path)
+    in
+    Printf.sprintf "(%s %d:%d-%d:%d%s)" (quote_rust_source path)
+      data.beg_loc.line data.beg_loc.col data.end_loc.line data.end_loc.col kind
+  in
+  let source = def.item_meta.span in
+  let locations =
+    match source.generated_from_span with
+    | None -> [ span source.data ^ "`" ]
+    | Some data -> [ span source.data; "from " ^ span data ^ "`" ]
+  in
+  let visibility =
+    if def.item_meta.attr_info.public then [ "Visibility: public" ] else []
+  in
+  extract_doc_comment fmt
+    ([
+       "Rust source {Aeneas.RustSource.rustOrigin}`";
+       quote_rust_source (name_to_string ctx def.item_meta.name);
+     ]
+    @ locations @ visibility)
+
+let extract_plain_fun_doc (ctx : extraction_ctx) (fmt : F.formatter)
     (def : fun_decl) : unit =
   let comment_pre = "[" ^ name_to_string ctx def.item_meta.name ^ "]:" in
   let comment =
@@ -2072,6 +2146,11 @@ let extract_fun_comment (ctx : extraction_ctx) (fmt : F.formatter)
   in
   extract_comment_with_span ctx fmt comment name
     ~public:def.item_meta.attr_info.public def.item_meta.span
+
+let extract_fun_comment (ctx : extraction_ctx) (fmt : F.formatter)
+    (def : fun_decl) : unit =
+  if has_rust_source ctx def then extract_rust_source_doc ctx fmt def
+  else extract_plain_fun_doc ctx fmt def
 
 (** Extract a function declaration.
 

@@ -144,6 +144,9 @@ let () =
       ( "-emit-json",
         Arg.Set emit_json,
         " Emit a translation.json file alongside the Lean files (Lean only)" );
+      ( "-lean-rust-source",
+        Arg.Set lean_rust_source,
+        " Record Rust source locations in generated docstrings (Lean only)" );
       ("-print-llbc", Arg.Set print_llbc, " Print the imported LLBC");
       ( "-abort-on-error",
         Arg.Set fail_hard,
@@ -481,6 +484,9 @@ let () =
       "The -max-recdepth option is valid only for the Lean backend";
   if !emit_json && not (backend () = Lean) then
     fail_with_error "The -emit-json option is valid only for the Lean backend";
+  if !lean_rust_source && not (backend () = Lean) then
+    fail_with_error
+      "The -lean-rust-source option is valid only for the Lean backend";
 
   check_arg_implies !diagnose_detailed "-diagnose-detailed"
     !diagnose_micro_passes "-diagnose-micro-passes";

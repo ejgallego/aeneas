@@ -33,6 +33,7 @@ update:
 .PHONY: verify
 verify:
 	lake exe cache get && lake build
+	lake env lean --run scripts/RustSourceNavigation.lean
 
 .PHONY: clean
 clean:

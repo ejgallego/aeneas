@@ -60,10 +60,10 @@ jobs:
         with:
           fetch-depth: 0 # deep clone in order to get access to other commits
       - id: lean_cache_key
-        # The key covers every input of the Lean build
+        # The key covers the inputs to the Lean build and navigation test.
         run: |
           deps=$(git rev-parse HEAD:backends/lean/lean-toolchain HEAD:backends/lean/lake-manifest.json HEAD:tests/lean/lake-manifest.json | sha256sum | cut -c1-16)
-          content=$(git rev-parse HEAD:backends/lean HEAD:tests/lean | sha256sum | cut -c1-16)
+          content=$(git rev-parse HEAD:backends/lean HEAD:tests/lean HEAD:tests/src/rust_source_provenance.rs | sha256sum | cut -c1-16)
           prefix="lean-build-$deps-"
           echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
           echo "key=$prefix$content" >> "$GITHUB_OUTPUT"
@@ -74,12 +74,11 @@ jobs:
         run: |
           # Compare with `main` for PRs and with the previous tip of `main` for pushes to `main`.
           if [ "$EVENT" = push ]; then base=$BEFORE; else base=origin/main; fi
-          if git diff "$base" --quiet -- tests/lean backends/lean; then
-              echo 'lean files were not changed.'
-              echo "CHECK_LEAN=false" >> "$GITHUB_ENV"
-          else
-              echo 'lean files were changed.'
+          if ! git diff "$base" --quiet -- tests/lean backends/lean tests/src/rust_source_provenance.rs; then
+              echo 'Lean test inputs changed.'
               echo "CHECK_LEAN=true" >> "$GITHUB_ENV"
+          else
+              echo "CHECK_LEAN=false" >> "$GITHUB_ENV"
           fi
           # Two OCaml files are derivatives of the Lean code so we check if they were changed.
           if git diff "$base" --quiet -- src/extract/ExtractBuiltinLean.ml; then

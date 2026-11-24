@@ -889,6 +889,10 @@ let export_functions_group_scc (fmt : Format.formatter) (config : gen_config)
     in
     ctx.extracted_opaque := contains_opaque || !(ctx.extracted_opaque);
 
+    (* Scope the option to the whole declaration, including any mutual block. *)
+    if List.exists (Extract.has_rust_source ctx) decls then (
+      Format.pp_print_break fmt 0 0;
+      Format.pp_print_string fmt "set_option doc.verso true in");
     Extract.start_fun_decl_group ctx fmt is_rec decls;
     List.iter (fun f -> f ()) extract_defs;
     Extract.end_fun_decl_group fmt is_rec decls)
@@ -1379,6 +1383,10 @@ let extract_file (config : gen_config) (ctx : gen_ctx) (fi : extract_file_info)
       List.iter
         (fun m -> Printf.fprintf out "%s %s\n" import_kw m)
         fi.custom_includes;
+      if
+        !Config.lean_rust_source && config.extract_fun_decls
+        && !Config.use_lean_modules
+      then Printf.fprintf out "meta import Aeneas.RustSource\n";
       if !Config.use_lean_modules then
         Printf.fprintf out "@[expose] public section\n";
       (* Always open the Primitives namespace *)
