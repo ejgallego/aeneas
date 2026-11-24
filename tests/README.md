@@ -27,6 +27,23 @@ CI does both of these things; it also checks that we committed all the generated
 Important note: at the moment we don't regenerate the HOL4 outputs. We do still check them with
 hol4. This is tracked in https://github.com/AeneasVerif/aeneas/issues/62.
 
+### Checking Rust source locations in Lean
+
+The fixture uses the `x86_64-apple-darwin` and `aarch64-apple-darwin` targets
+from Charon's pinned Rust toolchain. Run these commands from the repository root.
+
+```sh
+make test-rust_source_provenance.rs
+cd tests/lean
+lake build RustSourceCheck RustSourceNavigation
+lake env lean --run scripts/RustSourceNavigation.lean
+```
+
+`RustSourceCheck` verifies the recorded locations after importing the generated
+module. The headless test checks that a Verso docstring displays Rust source and
+that go-to-definition opens the Rust file from the docstring and the Lean
+definition from a Lean term.
+
 ## Adding a new test
 
 Adding a new test is easy: just add a `foo.rs` file or a `foo_crate` folder in `tests/src`. `make

@@ -117,6 +117,41 @@ to display a detailed documentation.
 >     rev = "COMMIT_HASH_HERE"
 >     ```
 
+### Find the Rust source for a generated Lean function
+
+Proof documentation and editor tools can use a Lean declaration name to find
+the Rust function it came from. To record those locations, pass
+`-lean-rust-source` when generating Lean code.
+
+```sh
+aeneas example.llbc -backend lean -lean-rust-source
+```
+
+Aeneas adds a `@[rust_source ...]` attribute to generated functions that come
+from a local Rust definition. Import the generated module and query
+`Aeneas.RustSource.find?` with the current Lean environment and the fully
+qualified Lean name. This example prints the Rust file and line for a function
+in the test fixture.
+
+```lean
+module
+import RustSourceProvenance
+meta import Aeneas.RustSource
+
+open Lean in
+run_cmd do
+  let some source := Aeneas.RustSource.find? (← getEnv) ``rust_source_provenance.target_value
+    | throwError "No Rust source location recorded"
+  logInfo m!"{source.span.path}:{source.span.startLine}"
+```
+
+For a macro-generated function, the lookup can return both the macro call site
+and the source that produced the function. The API documents how to interpret
+paths and positions. [Rust source API](backends/lean/Aeneas/RustSource.lean)
+
+The test suite includes a Verso docstring that displays the Rust function and
+an editor navigation test that opens its source. [Run the regression](tests/README.md#checking-rust-source-locations-in-lean)
+
 ## Targeted Subset And Current Limitations
 
 Aeneas currently functionalizes a subset of safe Rust, and we are in the process
