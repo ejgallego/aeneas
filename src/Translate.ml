@@ -636,6 +636,10 @@ type gen_config = {
           file if needed. *)
 }
 
+let exports_function (config : gen_config) ~(is_opaque : bool) : bool =
+  config.extract_fun_decls
+  && if is_opaque then config.extract_opaque else config.extract_transparent
+
 (** Returns the pair: (has opaque type decls, has opaque fun decls).
 
     [filter_builtin]: if [true], do not consider as opaque the external
@@ -870,10 +874,7 @@ let export_functions_group_scc (fmt : Format.formatter) (config : gen_config)
           has_decreases_clause def && config.extract_decreases_clauses
         in
         (* Check if the definition needs to be filtered or not *)
-        if
-          ((not is_opaque) && config.extract_transparent)
-          || (is_opaque && config.extract_opaque)
-        then
+        if exports_function config ~is_opaque then
           Some
             (fun () ->
               Extract.extract_fun_decl ctx fmt kind has_decr_clause def;
@@ -976,9 +977,11 @@ let export_functions_group (fmt : Format.formatter) (config : gen_config)
     (* Extract the function definitions *)
     export_fun_decls_scc fmt config ctx decls;
 
-    (* Insert unit tests for functions marked with #[verify::test] *)
+    (* Emit #[verify::test] checks after the functions in this file. *)
     List.iter
-      (fun trans -> Extract.extract_unit_test_if_marked ctx fmt trans.f)
+      (fun trans ->
+        if exports_function config ~is_opaque:(Option.is_none trans.f.body) then
+          Extract.extract_unit_test_if_marked ctx fmt trans.f)
       pure_ls)
 
 (** Export a global declaration.
